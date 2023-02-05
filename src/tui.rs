@@ -11,7 +11,7 @@ pub struct TUI {
 impl TUI {
     pub fn new() -> Self {
         ctrlc::set_handler(move || {
-            print!("\x1b[?25h");
+            print!("\x1b[?25h\x1b[2J\x1b[H");
             io::stdout().flush().unwrap();
             std::process::exit(0)
         }).unwrap();
