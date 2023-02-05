@@ -10,17 +10,9 @@ pub struct TUI {
 
 impl TUI {
     pub fn new() -> Self {
-        ctrlc::set_handler(move || {
-            print!("\x1b[?25h\x1b[2J\x1b[H");
-            io::stdout().flush().unwrap();
-            std::process::exit(0)
-        }).unwrap();
-
-        let mut todo_list = vec!["test item".to_owned(); 100];
-        todo_list.push("last".to_owned());
         Self {
             title: "TODO-List".to_owned(),
-            todo_list,
+            todo_list: Vec::new(),
             at_line: 0,
             state: TUIState::Home,
             controls: vec![("^C", "Exit"), ("A", "Add"), ("D", "Remove"), ("M", "Move"), ("⇅", "Scroll")]
@@ -128,7 +120,7 @@ impl TUI {
                                     TUIState::NewItem { current, .. } => {
                                         self.todo_list.insert(
                                             self.todo_list.len().min(self.at_line),
-                                            current.to_owned().replace("*", "\x1b[7m*\x1b[27m")
+                                            current.to_owned().replace("*", "\x1b[0;1;93;7m*\x1b[0m")
                                         )
                                     },
                                     TUIState::RemoveItem { current, .. } => {
