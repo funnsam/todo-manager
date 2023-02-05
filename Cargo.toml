@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 console = "0.15.5"
 termsize = "0.1"
+ctrlc = { version = "3.2.5", features = ["termination"] }
