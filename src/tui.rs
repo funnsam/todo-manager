@@ -126,7 +126,10 @@ impl TUI {
                             if !current.trim().is_empty() {
                                 match &self.state {
                                     TUIState::NewItem { current, .. } => {
-                                        self.todo_list.insert(self.todo_list.len().min(self.at_line), current.to_owned())
+                                        self.todo_list.insert(
+                                            self.todo_list.len().min(self.at_line),
+                                            current.to_owned().replace("*", "\x1b[7m*\x1b[27m")
+                                        )
                                     },
                                     TUIState::RemoveItem { current, .. } => {
                                         match current.parse::<usize>() {
