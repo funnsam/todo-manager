@@ -65,16 +65,16 @@ impl TUI {
                         }
                     }
                     TUIState::BeforeTextbox(n) => {
-                        write!(&mut out, "\x1b[?25h\x1b[0;4m{}\x1b[0m", " ".repeat(size.0)).unwrap();
+                        write!(&mut out, "\x1b[?25h\x1b[0;4m{}\x1b[0m\x1b[0G", " ".repeat(size.0)).unwrap();
                         self.state = *(*n).to_owned()
                     },
                     _ => unreachable!()
                 }
             },
-            TUIState::NewItem       { current, .. } |
-            TUIState::RemoveItem    { current, .. } |
-            TUIState::MoveItem      { current, .. } => {
-                write!(&mut out, "\x1b[?25h\x1b[0G\x1b[0;4m{}{}\x1b[0m", current, " ".repeat(size.0-current.len())).unwrap();
+            TUIState::NewItem       { current, cursor_pos } |
+            TUIState::RemoveItem    { current, cursor_pos } |
+            TUIState::MoveItem      { current, cursor_pos } => {
+                write!(&mut out, "\x1b[?25h\x1b[0G\x1b[0;4m{current}{}\x1b[0m\x1b[{}G", " ".repeat(size.0-current.len()), *cursor_pos+1).unwrap();
             },
         }
 
@@ -134,7 +134,7 @@ impl TUI {
                                     TUIState::RemoveItem { current, .. } => {
                                         match current.parse::<usize>() {
                                             Ok(v) => {
-                                                if v > self.todo_list.len() { print!("\x07"); } else {
+                                                if v > self.todo_list.len() || v == 0 { print!("\x07"); } else {
                                                     self.todo_list.remove(v-1);
                                                 }
                                             },
@@ -150,7 +150,7 @@ impl TUI {
                                             for i in current.iter() {
                                                 match i {
                                                     None => { print!("\x07"); self.draw_auto(); return },
-                                                    Some(v) => if *v > self.todo_list.len() { print!("\x07"); self.draw_auto(); return }
+                                                    Some(v) => if *v > self.todo_list.len() || *v == 0 { print!("\x07"); self.draw_auto(); return }
                                                 }
                                             }
                                             self.todo_list.swap(current[0].unwrap()-1, current[1].unwrap()-1)
