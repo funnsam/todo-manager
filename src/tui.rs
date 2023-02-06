@@ -95,9 +95,15 @@ impl TUI {
                             }
                         },
                         Key::ArrowUp    => self.at_line = self.at_line.checked_sub(1).unwrap_or_else(|| {print!("\x07"); 0}),
-                        Key::ArrowDown  => self.at_line = self.at_line.checked_add(1).unwrap_or_else(|| {print!("\x07"); self.at_line}).min(self.todo_list.len()-1),
+                        Key::ArrowDown  => {
+                            self.at_line = self.at_line.checked_add(1).unwrap_or_else(|| {print!("\x07"); self.at_line});
+                            if self.at_line >= self.todo_list.len() {
+                                print!("\x07");
+                                self.at_line -= 1;
+                            }
+                        },
                         Key::ArrowLeft  => self.at_line = 0,
-                        Key::ArrowRight => self.at_line = self.todo_list.len()-1,
+                        Key::ArrowRight => self.at_line = self.todo_list.len().checked_sub(1).unwrap_or(0),
                         _ => print!("\x07")
                     }
                 },
