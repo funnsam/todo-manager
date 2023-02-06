@@ -15,7 +15,7 @@ impl TUI {
             todo_list: Vec::new(),
             at_line: 0,
             state: TUIState::Home,
-            controls: vec![("^C", "Exit"), ("A", "Add"), ("D", "Remove"), ("M", "Move"), ("⇅", "Scroll")]
+            controls: vec![("^C", "Exit"), ("A", "Add"), ("D", "Remove"), ("M", "Move"), ("⇅", "Scroll"), ("S", "Save"), ("L", "Load")]
         }
     }
     pub fn draw(&mut self, size: (usize, usize)) {
@@ -66,7 +66,7 @@ impl TUI {
             TUIState::NewItem       { current, cursor_pos } |
             TUIState::RemoveItem    { current, cursor_pos } |
             TUIState::MoveItem      { current, cursor_pos } => {
-                write!(&mut out, "\x1b[?25h\x1b[0G\x1b[0;4m{current}{}\x1b[0m\x1b[{}G", " ".repeat(size.0-current.len()), *cursor_pos+1).unwrap();
+                write!(&mut out, "\x1b[?25h\x1b[0G\x1b[0;4m{current}{}\x1b[0m\x1b[{}G", " ".repeat(size.0.max(current.len())-current.len()), *cursor_pos+1).unwrap();
             },
         }
 
@@ -91,6 +91,8 @@ impl TUI {
                                 'a' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::NewItem { cursor_pos: 0, current: String::new() })),
                                 'd' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::RemoveItem { cursor_pos: 0, current: String::new() })),
                                 'm' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::MoveItem { cursor_pos: 0, current: String::new() })),
+                                's' => std::fs::write("save.ftms", self.as_bytes()).unwrap(),
+                                'l' => *self = Self::from_bytes(&std::fs::read("save.ftms").unwrap()).unwrap(),
                                 _   => print!("\x07")
                             }
                         },
@@ -159,6 +161,16 @@ impl TUI {
                             }
                             self.state = TUIState::Home;
                         },
+                        Key::ArrowLeft  => *cursor_pos = cursor_pos.checked_sub(1).unwrap_or_else(|| {print!("\x07"); 0}),
+                        Key::ArrowRight => {
+                            *cursor_pos = cursor_pos.checked_add(1).unwrap_or(*cursor_pos);
+                            if *cursor_pos > current.len() {
+                                *cursor_pos -= 1;
+                                print!("\x07")
+                            }
+                        },
+                        Key::Home   => *cursor_pos = 0,
+                        Key::End    => *cursor_pos = current.len(),
                         _ => print!("\x07")
                     }
                 },
@@ -166,6 +178,43 @@ impl TUI {
             }
             self.draw_auto();
         }
+    }
+
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let len = self.todo_list.len() as u32;
+        let mut buf = vec![0xFE, 0xDC, 0x00, (len>>24) as u8, (len>>16) as u8, (len>>8) as u8, len as u8];
+        for i in self.todo_list.iter() {
+            buf.extend(i.as_bytes());
+            buf.push(0);
+        }
+        buf
+    }
+
+    pub fn from_bytes(buf: &Vec<u8>) -> Option<Self> {
+        let mut a = Self::new();
+        if buf.len() < 7 {
+            return None
+        }
+        if buf[0] != 0xFE || buf[1] != 0xDC || buf[2] != 0 {
+            return None
+        }
+        let reads = ((buf[3] as u32) << 24) |
+                    ((buf[4] as u32) << 16) |
+                    ((buf[5] as u32) <<  8) |
+                    buf[6] as u32;
+        let mut pos = 7;
+        for _ in 0..reads {
+            let mut this = Vec::new();
+            while buf[pos] != 0 {
+                this.push(buf[pos]);
+                pos += 1;
+            }
+            pos += 1;
+
+            a.todo_list.push(String::from_utf8(this).unwrap());
+        }
+
+        Some(a)
     }
 }
 
