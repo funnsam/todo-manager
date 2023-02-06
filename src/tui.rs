@@ -1,7 +1,7 @@
 use std::{io::{self, *}};
 
 pub struct TUI {
-    title: String,
+    title: &'static str,
     todo_list: Vec<String>,
     at_line: usize,
     state: TUIState,
@@ -11,10 +11,10 @@ pub struct TUI {
 impl TUI {
     pub fn new() -> Self {
         Self {
-            title: "TODO-List".to_owned(),
+            title: "TODO-List",
             todo_list: Vec::new(),
             at_line: 0,
-            state: TUIState::Home,
+            state: TUIState::Home { info: None },
             controls: vec![("^C", "Exit"), ("A", "Add"), ("D", "Remove"), ("M", "Move"), ("⇅", "Scroll"), ("S", "Save"), ("L", "Load")]
         }
     }
@@ -23,7 +23,7 @@ impl TUI {
         let mut out = String::new();
         
         match &mut self.state {
-            TUIState::Home | TUIState::BeforeTextbox(_) => {
+            TUIState::Home { .. } | TUIState::BeforeTextbox(_) => {
                 let title_padding = size.0 - self.title.len() >> 1;
                 let title_padding = (title_padding, size.0-self.title.len()-title_padding);
 
@@ -45,15 +45,19 @@ impl TUI {
 
                 write!(&mut out, "\x1b[{}B", size.1 - list_items - 2).unwrap();
                 match &self.state {
-                    TUIState::Home => {
-                        let mut len = 0;
-                        for el in self.controls.iter() {
-                            let this = format!("\x1b[0;1;100;97m {} \x1b[0;97m {} \x1b[0m", el.0, el.1);
-                            len += console::strip_ansi_codes(&this).len();
-                            if len-2 > size.0 {
-                                break;
+                    TUIState::Home { info } => {
+                        if info.is_none() {
+                            let mut len = 0;
+                            for el in self.controls.iter() {
+                                let this = format!("\x1b[0;1;100;97m {} \x1b[0;97m {} \x1b[0m", el.0, el.1);
+                                len += console::strip_ansi_codes(&this).len();
+                                if len-2 > size.0 {
+                                    break;
+                                }
+                                write!(&mut out, "{}", this).unwrap();
                             }
-                            write!(&mut out, "{}", this).unwrap();
+                        } else {
+                            write!(&mut out, "\x1b[0;1;96m[i]\x1b[0m {}", info.unwrap()).unwrap()
                         }
                     }
                     TUIState::BeforeTextbox(n) => {
@@ -65,7 +69,9 @@ impl TUI {
             },
             TUIState::NewItem       { current, cursor_pos } |
             TUIState::RemoveItem    { current, cursor_pos } |
-            TUIState::MoveItem      { current, cursor_pos } => {
+            TUIState::MoveItem      { current, cursor_pos } |
+            TUIState::Save          { cursor_pos, current } |
+            TUIState::Load          { cursor_pos, current } => {
                 write!(&mut out, "\x1b[?25h\x1b[0G\x1b[0;4m{current}{}\x1b[0m\x1b[{}G", " ".repeat(size.0.max(current.len())-current.len()), *cursor_pos+1).unwrap();
             },
         }
@@ -84,15 +90,16 @@ impl TUI {
         if let Ok(key) = stdin.read_key() {
             use console::Key;
             match &mut self.state {
-                TUIState::Home => {
+                TUIState::Home { info } => {
+                    *info = None;
                     match key {
                         Key::Char(c) => {
                             match c.to_ascii_lowercase() {
-                                'a' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::NewItem { cursor_pos: 0, current: String::new() })),
-                                'd' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::RemoveItem { cursor_pos: 0, current: String::new() })),
-                                'm' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::MoveItem { cursor_pos: 0, current: String::new() })),
-                                's' => std::fs::write("save.ftms", self.as_bytes()).unwrap(),
-                                'l' => *self = Self::from_bytes(&std::fs::read("save.ftms").unwrap()).unwrap(),
+                                'a' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::NewItem      { cursor_pos: 0, current: String::new() })),
+                                'd' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::RemoveItem   { cursor_pos: 0, current: String::new() })),
+                                'm' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::MoveItem     { cursor_pos: 0, current: String::new() })),
+                                's' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::Save         { cursor_pos: 0, current: String::new() })),
+                                'l' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::Load         { cursor_pos: 0, current: String::new() })),
                                 _   => print!("\x07")
                             }
                         },
@@ -111,7 +118,9 @@ impl TUI {
                 },
                 TUIState::NewItem       { cursor_pos, current } |
                 TUIState::RemoveItem    { cursor_pos, current } |
-                TUIState::MoveItem      { cursor_pos, current } => {
+                TUIState::MoveItem      { cursor_pos, current } |
+                TUIState::Save          { cursor_pos, current } |
+                TUIState::Load          { cursor_pos, current } => {
                     match key {
                         Key::Char(c) => {current.insert(*cursor_pos, c); *cursor_pos += 1},
                         Key::Backspace => {
@@ -155,11 +164,29 @@ impl TUI {
                                             }
                                             self.todo_list.swap(current[0].unwrap()-1, current[1].unwrap()-1)
                                         }
-                                    }
+                                    },
+                                    TUIState::Save { current, .. } => {
+                                        std::fs::write(current.to_owned()+".ftms", self.as_bytes()).unwrap()
+                                    },
+                                    TUIState::Load { current, .. } => {
+                                        let data = std::fs::read(current.to_owned()+".ftms");
+                                        if data.is_err() {
+                                            self.state = TUIState::Home { info: Some("\x1b[0;1;91mCan't find file\x1b[0m") };
+                                            self.draw_auto();
+                                            return
+                                        }
+                                        let new = Self::from_bytes(&data.unwrap());
+                                        if new.is_none() {
+                                            self.state = TUIState::Home { info: Some("\x1b[0;1;91mFile format error\x1b[0m") };
+                                            self.draw_auto();
+                                            return
+                                        }
+                                        *self = new.unwrap()
+                                    },
                                     _ => unreachable!()
                                 }
                             }
-                            self.state = TUIState::Home;
+                            self.state = TUIState::Home { info: None };
                         },
                         Key::ArrowLeft  => *cursor_pos = cursor_pos.checked_sub(1).unwrap_or_else(|| {print!("\x07"); 0}),
                         Key::ArrowRight => {
@@ -220,7 +247,9 @@ impl TUI {
 
 #[derive(Clone)]
 pub enum TUIState {
-    Home,
+    Home {
+        info: Option<&'static str>
+    },
     BeforeTextbox(Box<TUIState>),
     NewItem {
         cursor_pos: usize,
@@ -233,6 +262,16 @@ pub enum TUIState {
     },
 
     MoveItem {
+        cursor_pos: usize,
+        current: String
+    },
+
+    Save {
+        cursor_pos: usize,
+        current: String
+    },
+
+    Load {
         cursor_pos: usize,
         current: String
     },
