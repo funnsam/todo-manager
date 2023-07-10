@@ -1,4 +1,4 @@
-use std::{io::{self, *}};
+use std::io::{self, *};
 
 pub struct TUI {
     title: &'static str,
@@ -15,7 +15,7 @@ impl TUI {
             todo_list: Vec::new(),
             at_line: 0,
             state: TUIState::Home { info: None },
-            controls: vec![("^C", "Exit"), ("A", "Add"), ("D", "Remove"), ("M", "Move"), ("⇅", "Scroll"), ("S", "Save"), ("L", "Load")]
+            controls: vec![("Esc", "Exit"), ("A", "Add"), ("D", "Remove"), ("M", "Move"), ("\u{f1552}", "Scroll"), ("S", "Save"), ("L", "Load")]
         }
     }
     pub fn draw(&mut self, size: (usize, usize)) {
@@ -27,7 +27,7 @@ impl TUI {
                 let title_padding = size.0 - self.title.len() >> 1;
                 let title_padding = (title_padding, size.0-self.title.len()-title_padding);
 
-                writeln!(&mut out, "\x1b[2J\x1b[H\x1b[?25l\x1b[0;46m{}\x1b[0;1;97m{}\x1b[46m{}\x1b[0m",
+                write!(&mut out, "\x1b[2J\x1b[H\x1b[?25l\x1b[0;46m{}\x1b[0;1;97m{}\x1b[46m{}\x1b[0m",
                     " ".repeat(title_padding.0), self.title, " ".repeat(title_padding.1)
                 ).unwrap();
 
@@ -39,17 +39,17 @@ impl TUI {
                         continue
                     }
 
-                    writeln!(&mut out, "\x1b[1;93m{:4} |\x1b[0m {}", i+1, el).unwrap();
+                    write!(&mut out, "\x1b[1;93m{:4} |\x1b[0m {}", i+1, el).unwrap();
                     list_items += 1;
                 }
 
-                write!(&mut out, "\x1b[{}B", size.1 - list_items - 2).unwrap();
+                writeln!(&mut out, "\x1b[{}B", size.1 - list_items - 2).unwrap();
                 match &self.state {
                     TUIState::Home { info } => {
                         if info.is_none() {
                             let mut len = 0;
                             for el in self.controls.iter() {
-                                let this = format!("\x1b[0;1;100;97m {} \x1b[0;97m {} \x1b[0m", el.0, el.1);
+                                let this = format!("\x1b[0;1;48;5;239;97m {} \x1b[0;97m {} \x1b[0m", el.0, el.1);
                                 len += console::strip_ansi_codes(&this).len();
                                 if len-2 > size.0 {
                                     break;
@@ -93,6 +93,11 @@ impl TUI {
                 TUIState::Home { info } => {
                     *info = None;
                     match key {
+                        Key::Escape => {
+                            print!("\x1b[?25h\x1b[2J\x1b[H");
+                            std::io::stdout().flush().unwrap();
+                            std::process::exit(0);
+                        },
                         Key::Char(c) => {
                             match c.to_ascii_lowercase() {
                                 'a' => self.state = TUIState::BeforeTextbox(Box::new(TUIState::NewItem      { cursor_pos: 0, current: String::new() })),
