@@ -15,7 +15,7 @@ impl TUI {
             todo_list: Vec::new(),
             at_line: 0,
             state: TUIState::Home { info: None },
-            controls: vec![("Esc", "Exit"), ("A", "Add"), ("D", "Remove"), ("M", "Move"), ("\u{f1552}", "Scroll"), ("S", "Save"), ("L", "Load")]
+            controls: vec![("Esc", "Exit"), ("A", "Add"), ("D", "Remove"), ("M", "Move"), ("\u{f0e7a}", "Scroll"), ("S", "Save"), ("L", "Load")]
         }
     }
     pub fn draw(&mut self, size: (usize, usize)) {
@@ -27,23 +27,23 @@ impl TUI {
                 let title_padding = size.0 - self.title.len() >> 1;
                 let title_padding = (title_padding, size.0-self.title.len()-title_padding);
 
-                write!(&mut out, "\x1b[2J\x1b[H\x1b[?25l\x1b[0;46m{}\x1b[0;1;97m{}\x1b[46m{}\x1b[0m",
+                writeln!(&mut out, "\x1b[2J\x1b[H\x1b[?25l\x1b[0;46m{}\x1b[0;1;97m{}\x1b[46m{}\x1b[0m",
                     " ".repeat(title_padding.0), self.title, " ".repeat(title_padding.1)
                 ).unwrap();
 
                 let mut list_items = 0;
                 for (i, el) in self.todo_list.iter().enumerate() {
-                    if self.at_line + size.1 - 3 < i {
+                    if self.at_line + size.1 < i+4 {
                         break
                     } else if self.at_line > i {
                         continue
                     }
 
-                    write!(&mut out, "\x1b[1;93m{:4} |\x1b[0m {}", i+1, el).unwrap();
+                    writeln!(&mut out, "\x1b[1;93m{:4} |\x1b[0m {}", i+1, el).unwrap();
                     list_items += 1;
                 }
 
-                writeln!(&mut out, "\x1b[{}B", size.1 - list_items - 2).unwrap();
+                write!(&mut out, "\x1b[{}B", size.1 - list_items - 2).unwrap();
                 match &self.state {
                     TUIState::Home { info } => {
                         if info.is_none() {
@@ -127,6 +127,7 @@ impl TUI {
                 TUIState::Save          { cursor_pos, current } |
                 TUIState::Load          { cursor_pos, current } => {
                     match key {
+                        Key::Escape => self.state = TUIState::Home { info: None },
                         Key::Char(c) => {current.insert(*cursor_pos, c); *cursor_pos += 1},
                         Key::Backspace => {
                             *cursor_pos = cursor_pos.checked_sub(1).unwrap_or(0);
@@ -140,8 +141,7 @@ impl TUI {
                             if !current.trim().is_empty() {
                                 match &self.state {
                                     TUIState::NewItem { current, .. } => {
-                                        self.todo_list.insert(
-                                            self.todo_list.len().min(self.at_line),
+                                        self.todo_list.push(
                                             current.to_owned().replace("*", "\x1b[0;1;93;7m*\x1b[0m")
                                         )
                                     },
@@ -167,7 +167,9 @@ impl TUI {
                                                     Some(v) => if *v > self.todo_list.len() || *v == 0 { print!("\x07"); self.draw_auto(); return }
                                                 }
                                             }
-                                            self.todo_list.swap(current[0].unwrap()-1, current[1].unwrap()-1)
+
+                                            let was = self.todo_list.remove(current[0].unwrap()-1);
+                                            self.todo_list.insert(current[1].unwrap()-1, was);
                                         }
                                     },
                                     TUIState::Save { current, .. } => {
